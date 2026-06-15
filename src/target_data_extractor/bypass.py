@@ -307,7 +307,12 @@ class BypassClient:
                 page = await context.new_page()
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.config.timeout * 1000)
                 # Wait for Cloudflare/JS challenge to resolve
-                await page.wait_for_load_state("networkidle", timeout=self.config.timeout * 1000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=self.config.timeout * 1000)
+                except Exception:
+                    logger.debug("networkidle timeout for %s, continuing with current content", url)
+                # Extra wait for SPA hydration (HackerOne, Intigriti inject __NEXT_DATA__ after JS runs)
+                await asyncio.sleep(2)
                 content = await page.content()
                 status = page.url
                 return BypassResponse(
