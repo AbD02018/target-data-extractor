@@ -33,6 +33,8 @@ class BypassConfig:
 
     # Strategy selection
     strategy: str = "auto"  # auto | curl_cffi | cloudscraper | playwright | undetected | camoufox
+    # auto = try cheap first (curl_cffi), escalate to playwright when page is JS-heavy
+    # bug bounty pages (H1, Intigriti, YWH) are heavily JS-rendered → set strategy="playwright" for fastest correct extraction
 
     # Proxy
     proxy: str | None = None  # http://user:pass@host:port
@@ -164,7 +166,14 @@ class BypassClient:
         return self._curl_session
 
     async def get(self, url: str, **kwargs: Any) -> BypassResponse:
-        """Async GET with auto-escalation. Returns BypassResponse."""
+        """Async GET with auto-escalation. Returns BypassResponse.
+
+        Escalates to next strategy on:
+          - explicit failure (exception)
+          - HTTP non-2xx
+          - detected anti-bot block
+          - JS-only page (response <4KB and no useful markup) - signals hydration needed
+        """
         start = time.monotonic()
         strategy = self.config.strategy
         last_error: Exception | None = None
@@ -177,25 +186,44 @@ class BypassClient:
                     response = await self._dispatch_get(current, url, **kwargs)
                     response.strategy_used = current
                     response.elapsed_seconds = time.monotonic() - start
-                    if not response.is_blocked and response.ok:
+                    if not response.is_blocked and response.ok and self._looks_like_real_content(response):
                         await self._respect_rate_limit()
                         return response
                     logger.debug(
-                        "Strategy %s attempt %d returned status=%d blocked=%s for %s",
-                        current, attempt, response.status_code, response.is_blocked, url,
+                        "Strategy %s attempt %d insufficient (status=%d blocked=%s len=%d) for %s",
+                        current, attempt, response.status_code, response.is_blocked, len(response.text), url,
                     )
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
                     logger.debug("Strategy %s attempt %d failed: %s", current, attempt, exc)
-                    if attempt < self.config.max_retries:
-                        backoff = self.config.backoff_factor ** attempt
-                        await asyncio.sleep(backoff)
-                        continue
+                if attempt < self.config.max_retries:
+                    backoff = self.config.backoff_factor ** attempt
+                    await asyncio.sleep(backoff)
 
         raise AntiBotError(
             f"All bypass strategies failed for {url!r}: {last_error}",
             url=url,
         )
+
+    def _looks_like_real_content(self, response: "BypassResponse") -> bool:
+        """Heuristic: is the page hydrated / has substance, or is it a JS shell?"""
+        if response.strategy_used in ("playwright", "camoufox", "undetected"):
+            return True  # browser always renders
+        text = response.text
+        if len(text) < 1500:
+            return False
+        # Real bug bounty pages mention things like 'scope', 'reward', 'bounty', 'severity', 'bounty', '$'
+        lower = text.lower()
+        signals = ("scope", "reward", "bounty", "severity", "critical", "out-of-scope", "eligible", "asset", "vulnerability", "report", "program")
+        if any(s in lower for s in signals):
+            return True
+        # Has JSON state injection (Next.js / Nuxt)
+        if "__NEXT_DATA__" in text or "window.__NUXT__" in text or "window.__PRELOADED_STATE__" in text:
+            return True
+        # If it's a normal HTML page > 5KB without obvious JS shell markers, accept it
+        if len(text) > 5000 and "<body" in text and "<p " in text:
+            return True
+        return False
 
     async def _dispatch_get(self, strategy: str, url: str, **kwargs: Any) -> BypassResponse:
         if strategy == "curl_cffi":
@@ -211,7 +239,7 @@ class BypassClient:
     def _resolve_strategies(self, requested: str) -> list[str]:
         if requested != "auto":
             return [requested]
-        # Auto-escalation order
+        # Auto-escalation: try cheap static first, escalate on JS-heavy or blocked
         return ["curl_cffi", "cloudscraper", "playwright"]
 
     async def _curl_cffi_get(self, url: str, **kwargs: Any) -> BypassResponse:

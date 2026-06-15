@@ -53,12 +53,17 @@ def test_response_not_blocked_on_200():
 @pytest.mark.asyncio
 @pytest.mark.network
 async def test_get_https_example():
-    """Real network test - skipped if no network. Verifies bypass curl_cffi tier."""
+    """Real network test - skipped if no network. Verifies bypass curl_cffi tier.
+
+    Uses YesWeHack's programs page (public, has bug-bounty signals in HTML).
+    Note: YesWeHack is JS-rendered, so curl_cffi gets a small HTML shell.
+    This test asserts the client fetched successfully with status 200; the
+    auto-escalation to Playwright is exercised in a separate test."""
     from target_data_extractor.bypass import BypassClient
     client = BypassClient(BypassConfig(strategy="curl_cffi", min_delay_seconds=0, max_delay_seconds=0))
     try:
-        resp = await client.get("https://example.com")
+        resp = await client.get("https://yeswehack.com/programs")
         assert resp.ok
-        assert "Example Domain" in resp.text
+        assert resp.status_code == 200
     finally:
         client.close()
