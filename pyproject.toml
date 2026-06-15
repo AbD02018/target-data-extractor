@@ -1,0 +1,122 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "target-data-extractor"
+version = "0.1.0"
+description = "Extract program scope, rules, and rewards from bug bounty pages across 7 platforms (HackerOne, Bugcrowd, Intigriti, Immunefi, YesWeHack, Bugrap, HackenProof). Send a link, get structured data."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+  { name = "Abdo Eldgoy" },
+  { name = "3azoz" }
+]
+keywords = [
+  "bug-bounty",
+  "scraping",
+  "hackerone",
+  "bugcrowd",
+  "intigriti",
+  "immunefi",
+  "yeswehack",
+  "bugrap",
+  "hackenproof",
+  "security",
+  "recon",
+  "scope",
+  "cloudflare-bypass"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Information Technology",
+  "Topic :: Security",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12"
+]
+requires-python = ">=3.10"
+dependencies = [
+  # Core HTTP (browser-fingerprint impersonation)
+  "curl-cffi>=0.7.1",
+  "cloudscraper>=1.2.71",
+  "httpx>=0.27.0",
+  # Browser automation (stealth)
+  "playwright>=1.45.0",
+  "playwright-stealth>=1.0.0",
+  "undetected-chromedriver>=3.5.5",
+  # HTML parsing
+  "beautifulsoup4>=4.12.0",
+  "lxml>=5.2.0",
+  "selectolax>=0.3.21",
+  # Models
+  "pydantic>=2.6.0",
+  # Output
+  "rich>=13.7.0",
+  "pyyaml>=6.0",
+  "tabulate>=0.9.0",
+  "jinja2>=3.1.0",
+  "markdown>=3.5.0",
+  # CLI
+  "click>=8.1.0",
+  "click-help-colors>=0.9.0",
+  # URL handling
+  "tldextract>=5.1.0",
+  # Browser fallback (Optional but useful)
+  "camoufox>=0.4.0; platform_system != 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "pytest-cov>=4.1",
+  "responses>=0.25",
+  "respx>=0.21",
+  "vcrpy>=6.0",
+  "ruff>=0.3.0",
+  "mypy>=1.8",
+  "pre-commit>=3.6",
+]
+all = ["target-data-extractor[dev]"]
+
+[project.scripts]
+tde = "target_data_extractor.cli:main"
+target-data-extractor = "target_data_extractor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/AbD02018/target-data-extractor"
+Documentation = "https://github.com/AbD02018/target-data-extractor/blob/main/docs/README.md"
+Repository = "https://github.com/AbD02018/target-data-extractor"
+Issues = "https://github.com/AbD02018/target-data-extractor/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+target_data_extractor = ["py.typed", "templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "network: marks tests that require network access",
+  "platform: marks tests for a specific platform",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # line-length handled by formatter
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
