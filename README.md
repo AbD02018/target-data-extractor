@@ -1,182 +1,121 @@
-# target-data-extractor 🛡️
+<div align="center">
 
-> **Send a bug bounty program link. Get structured program data. Across 7 platforms.**
+# 🎯 target-data-extractor
 
-Extract program scope, rules, bounty table, and asset details from any of:
-**HackerOne**, **Bugcrowd**, **Intigriti**, **Immunefi**, **YesWeHack**, **Bugrap**, **HackenProof**.
+### *Pipeline-ready target data extraction for bug bounty automation.*
 
-## Why?
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Output](https://img.shields.io/badge/output-JSON%2FYAML%2FCSV-success?style=flat-square)](#-output-formats)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-Bug bounty hunters waste time copy-pasting scope from 7 different UIs.
-This tool normalizes them into one schema. Send a link, get JSON / Markdown / HTML.
+</div>
 
-```bash
-$ tde extract "https://hackerone.com/security"
-{
-  "platform": "hackerone",
-  "program_name": "GitHub Security",
-  "max_bounty_usd": 60000,
-  "scope": { "in_scope_count": 42, "wildcards": ["*.github.com"], ... },
-  ...
-}
-```
+---
 
-## Install
+## 🎯 What
+
+`target-data-extractor` is the data-collection layer for automated bug bounty pipelines. It pulls program metadata, in-scope assets, contract addresses, and audit history into a normalized format that downstream tools (recon-cli, foundry templates, PoC generators) can consume.
+
+Use it to:
+- Build a local index of every active program you hunt
+- Detect scope changes
+- Generate per-target PoC boilerplate
+- Power dashboards / analytics
+
+---
+
+## ⚡ Quick Start
 
 ```bash
 pip install target-data-extractor
 ```
 
-(Or `pip install -e ".[dev]"` from source.)
-
-## CLI
+### From source
 
 ```bash
-tde detect <URL>                        # which platform?
-tde platforms                           # list all 7 supported platforms
-tde extract <URL>                       # print JSON to stdout
-tde extract <URL> -o program.json       # write JSON
-tde extract <URL> -f markdown -o p.md   # write Markdown
-tde extract <URL> -f html -o p.html     # write self-contained HTML
-tde list hackerone --limit 10           # list public programs
-tde --version
+git clone https://github.com/AbD02018/target-data-extractor
+cd target-data-extractor
+pip install -e .
 ```
 
-### Options
+---
 
-- `-f` / `--format`: `json` (default), `yaml`, `markdown`, `html`
-- `-o` / `--output`: write to file (format inferred from extension)
-- `--include-raw`: include the original platform response in output
-- `--bypass-strategy`: `auto` (default) | `curl_cffi` | `cloudscraper` | `playwright`
-- `-v` / `--verbose`: debug logging
-
-## Python API
-
-```python
-import asyncio
-from target_data_extractor import detect_platform, get_platform
-
-async def main():
-    url = "https://hackerone.com/security"
-    platform_name = detect_platform(url)
-    platform = get_platform(platform_name)
-
-    # If platform supports API, set token in env first:
-    # export HACKERONE_API_TOKEN="..."
-    # export BUGCROWD_API_KEY="..."
-    # export INTIGRITI_API_TOKEN="..."
-    # export YESWEHACK_TOKEN="..."
-
-    program = await platform.extract(url)
-    print(program.program_name, program.max_bounty_usd)
-    print("Wildcards:", [a.target for a in program.scope.wildcards])
-    print("Smart contracts:", [a.target for a in program.scope.smart_contracts])
-
-asyncio.run(main())
-```
-
-## How it Works
-
-### Two-tier fetch strategy
-
-| Tier | Strategy | Platforms | Why |
-|------|----------|-----------|-----|
-| **1 — API** | Official REST/GraphQL with auth token | HackerOne, Bugcrowd (YesWeHack with bearer) | Reliable, no scraping |
-| **2 — Scrape** | Bypass client (curl_cffi → cloudscraper → playwright) | Intigriti, Immunefi, YesWeHack, Bugrap, HackenProof | No public API |
-
-Every API-backed extractor automatically falls back to scrape if the API call fails.
-
-### Anti-bot bypass layer
-
-`BypassClient` auto-escalates through 3 strategies:
-
-1. **curl_cffi** — TLS/HTTP2 fingerprint impersonation (chrome120, firefox123, ...)
-2. **cloudscraper** — Cloudflare-specific JS challenge solver
-3. **playwright + stealth** — real headless Chromium with anti-fingerprint flags
-
-Configure via:
-- `BypassConfig(strategy="playwright")` — force heavy mode
-- `BypassConfig(proxy="http://user:pass@host:port")` — route through proxy
-- `BypassConfig(rotate_proxies=[...])` — pool
-
-### Output schema (normalized)
-
-Every platform returns the same `BountyProgram`:
-
-```python
-BountyProgram(
-    platform="hackerone",          # one of 7
-    program_handle="security",     # URL-safe slug
-    program_name="GitHub Security",
-    program_url=HttpUrl(...),
-    bounty_table=[BountyRange(...)],   # severity → min/max
-    max_bounty_usd=60000.0,
-    is_paid=True, is_private=False,
-    program_type="bug_bounty",     # or "smart_contract"
-    scope=ProgramScope(
-        in_scope=[ScopeAsset(target, asset_type, in_scope, max_severity, description), ...],
-        out_of_scope=[...],
-    ),
-    rules=ProgramRules(
-        safe_harbor=bool,
-        disclosure_policy=str,
-        requires_kyc=bool,
-        rules_text=str,
-    ),
-    description=str,
-    tags=[str, ...],
-    source_url=HttpUrl(...),
-    extracted_at=datetime,
-    extractor_version="0.1.0",
-)
-```
-
-Output formats: `JSON`, `YAML`, `Markdown`, `self-contained HTML` (Jinja2 + python-markdown).
-
-## Authentication (optional but recommended)
-
-Set tokens via env vars for **full data** from API-backed platforms:
+## 🚀 Usage
 
 ```bash
-export HACKERONE_API_TOKEN="..."        # https://hackerone.com/settings/api_token/edit
-export BUGCROWD_API_KEY="..."           # request from Bugcrowd support
-export INTIGRITI_API_TOKEN="..."        # researcher access token
-export YESWEHACK_TOKEN="..."            # bearer token
+# Extract all programs
+target-data-extractor extract --all --output programs.json
+
+# Extract one platform
+target-data-extractor extract --platform immunefi --output immunefi.json
+
+# Extract one program
+target-data-extractor extract --platform immunefi --program templar-protocol
+
+# Detect changes since last run
+target-data-extractor diff --since yesterday
 ```
 
-Without tokens, all platforms still work via scrape — but scope data may be limited on JS-heavy pages (HackerOne, Intigriti).
+---
 
-## Coverage matrix
+## 📦 Output Schema
 
-| Platform   | API path | Scrape path | Anti-bot tested | Notes |
-|------------|----------|-------------|-----------------|-------|
-| HackerOne  | ✅       | ✅ fallback | yes             | requires H1 token for full scope |
-| Bugcrowd   | ✅       | ✅ fallback | yes             | requires BC key for full scope |
-| Intigriti  | ❌       | ✅          | yes             | JS-heavy; needs playwright |
-| Immunefi   | partial  | ✅          | yes             | Web3-first; smart contract scope |
-| YesWeHack  | ✅       | ✅ fallback | yes             | requires bearer for full data |
-| Bugrap     | ❌       | ✅          | yes             | small platform; scope works |
-| HackenProof| ❌       | ✅          | yes             | small platform; scope works |
+```yaml
+program:
+  id: "templar-protocol"
+  platform: "immunefi"
+  url: "https://immunefi.com/bug-bounty/templar-protocol"
+  status: "live"
+  tvl_usd: 8_500_000          # when available
+  max_bounty_usd: 250_000
+  audit:
+    - auditor: "Trail of Bits"
+      date: "2026-04-12"
+      report_url: "..."
+  kyc_required: true
+  scope:
+    - type: "smart-contract"
+      chain: "near"
+      address: "v1.tmplr.near"
+      asset: "Templar Market"
+  tags: [defi, lending, near]
+  extracted_at: "2026-06-19T14:00:00Z"
+```
 
-## Anti-bot reality check (2026)
+---
 
-Cloudflare + DataDome are real obstacles. We respect platform rate limits
-and terms of service. The bypass layer is for **personal research use** —
-don't hammer paid bounty programs at scale. See `docs/ETHICS.md`.
+## 🏢 Supported Platforms
 
-## Roadmap
+| Platform | Coverage |
+|---|---|
+| Immunefi | Full (incl. TVL, audit history) |
+| HackerOne | Public programs only |
+| Cantina | Active audits + competitions |
+| Bugcrowd | Public programs only |
+| YesWeHack | Public programs only |
+| Bugrap | Public programs |
+| HackenProof | Public programs |
 
-- [x] v0.1.0 — 7 platforms, API+scrape, JSON/MD/HTML output
-- [ ] v0.2.0 — Caching layer (etag/If-Modified-Since) for repeated queries
-- [ ] v0.3.0 — Diff mode: compare scope changes between scrapes
-- [ ] v0.4.0 — CLI for batch extraction from URL lists
-- [ ] v0.5.0 — Web UI (Gradio/Streamlit)
-- [ ] v1.0.0 — Stable, all platforms green, <2s average extraction
+---
 
-## License
+## 🤝 Contributing
 
-MIT — see `LICENSE`.
+PRs welcome for:
+- New platform integrations
+- Schema extensions
+- Caching layer
+- Output format improvements
 
-## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-See `CONTRIBUTING.md`. PRs welcome for new platform support and bug fixes.
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+  <sub>Built by <a href="https://github.com/AbD02018">@AbD02018</a> · Smart contract security researcher</sub>
+</div>
